@@ -1,12 +1,29 @@
 import cv2
 import time
 import os
+import csv
 import pickle
 import numpy as np
+from datetime import datetime
 from ultralytics import YOLO
 from insightface.app import FaceAnalysis
 
 DB_FILE = "face_database.pkl"
+CSV_FILE = "presence_log.csv"
+
+# Initialize CSV file with headers if it doesn't exist
+if not os.path.exists(CSV_FILE):
+    with open(CSV_FILE, mode="w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["Timestamp", "Name", "Action", "Session Duration (s)"])
+
+def log_event(name, action, duration="-"):
+    """Appends sit-in or sit-out events to the CSV file."""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(CSV_FILE, mode="a", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([timestamp, name, action, duration])
+    print(f"[CSV LOG] {timestamp} | {name} | {action} | Duration: {duration}")
 
 print("Loading YOLO for Intel GPU...")
 base_model = YOLO('yolov8n-face.pt')
@@ -17,7 +34,7 @@ print("Loading InsightFace on Intel DirectML...")
 app = FaceAnalysis(name='buffalo_s', providers=['DmlExecutionProvider', 'CPUExecutionProvider'])
 app.prepare(ctx_id=0, det_size=(160, 160))
 
-# Load registered identities from database
+# Load registered database
 if os.path.exists(DB_FILE):
     with open(DB_FILE, "rb") as f:
         known_faces = pickle.load(f)
@@ -32,9 +49,11 @@ cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
 active_tracks = {}        # { track_id: global_id }
 track_frame_counts = {}   # Warm-up counter per track ID
+person_sessions = {}      # { global_id: {"start_time": float, "last_seen": float} }
 
 COSINE_THRESHOLD = 0.72
 MAX_GALLERY_SIZE = 5
+SIT_OUT_TIMEOUT = 2.0     # Seconds of absence before triggering SIT_OUT event
 next_person_id = 1
 
 cached_faces = []
@@ -74,6 +93,8 @@ while cap.isOpened():
     # 2. Track heads via YOLO
     results = model.track(frame, imgsz=320, conf=0.45, persist=True, verbose=False)[0]
     present_count = 0
+
+    currently_visible_persons = set()
 
     if results.boxes is not None and results.boxes.id is not None:
         boxes = results.boxes.xyxy.cpu().numpy()
@@ -124,11 +145,21 @@ while cap.isOpened():
 
                     active_tracks[track_id] = global_id
 
-            # Accumulate presence duration
-            if global_id and global_id in known_faces:
-                known_faces[global_id]["total_time"] += dt
-                accumulated_seconds = int(known_faces[global_id]["total_time"])
-                label = f"{global_id} | Time: {accumulated_seconds}s"
+                    # LOG SIT IN EVENT
+                    if global_id not in person_sessions:
+                        person_sessions[global_id] = {
+                            "start_time": current_time,
+                            "last_seen": current_time
+                        }
+                        log_event(global_id, "SIT_IN")
+
+            # Update session last_seen timestamp
+            if global_id:
+                currently_visible_persons.add(global_id)
+                if global_id in person_sessions:
+                    person_sessions[global_id]["last_seen"] = current_time
+
+                label = f"{global_id} | Status: Active"
                 color = (0, 255, 0) if not global_id.startswith("Visitor") else (0, 255, 255)
             else:
                 label = f"Head #{track_id} (Checking...)"
@@ -138,17 +169,34 @@ while cap.isOpened():
             cv2.putText(frame, label, (x1, max(y1 - 10, 20)),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
-    cv2.putText(frame, f"Heads Present: {present_count}", (20, 40),
+    # 3. Check for SIT_OUT (leaving frame) events
+    finished_sessions = []
+    for g_id, session_data in person_sessions.items():
+        if g_id not in currently_visible_persons:
+            if current_time - session_data["last_seen"] > SIT_OUT_TIMEOUT:
+                duration = int(session_data["last_seen"] - session_data["start_time"])
+                log_event(g_id, "SIT_OUT", duration=f"{duration}s")
+                finished_sessions.append(g_id)
+
+    for g_id in finished_sessions:
+        del person_sessions[g_id]
+
+    cv2.putText(frame, f"Active Seats: {present_count}", (20, 40),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
 
-    cv2.imshow("Presence Counter - Named Recognition", frame)
+    cv2.imshow("Sit-In / Sit-Out Tracker", frame)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
+# Handle SIT_OUT for anyone still seated when quitting script
+for g_id, session_data in person_sessions.items():
+    duration = int(time.time() - session_data["start_time"])
+    log_event(g_id, "SIT_OUT (App Closed)", duration=f"{duration}s")
+
 cap.release()
 cv2.destroyAllWindows()
 
-# Optionally save presence times back to pickle on exit
+# Save embeddings back to database
 with open(DB_FILE, "wb") as f:
     pickle.dump(known_faces, f)

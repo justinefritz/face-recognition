@@ -36,7 +36,7 @@ def cosine_distance(a, b):
 
 recording = False
 start_time = None
-RECORDING_DURATION = 10.0  # Seconds to record
+RECORDING_DURATION = 15.0  # Seconds to record
 captured_embeddings = []
 
 print("\n--- INSTRUCTIONS ---")
