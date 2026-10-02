@@ -23,14 +23,11 @@ def log_event(name, action, duration="-"):
     with open(CSV_FILE, mode="a", newline="") as f:
         writer = csv.writer(f)
         writer.writerow([timestamp, name, action, duration])
-    print(f"[CSV LOG] {timestamp} | {name} | {action} | Duration: {duration}")
 
-print("Loading YOLO for Intel GPU...")
 base_model = YOLO('yolov8n-face.pt')
 base_model.export(format='openvino', dynamic=True, verbose=False)
 model = YOLO('yolov8n-face_openvino_model/')
 
-print("Loading InsightFace on Intel DirectML...")
 app = FaceAnalysis(name='buffalo_s', providers=['DmlExecutionProvider', 'CPUExecutionProvider'])
 app.prepare(ctx_id=0, det_size=(160, 160))
 
@@ -38,9 +35,7 @@ app.prepare(ctx_id=0, det_size=(160, 160))
 if os.path.exists(DB_FILE):
     with open(DB_FILE, "rb") as f:
         known_faces = pickle.load(f)
-    print(f"Loaded registered database: {list(known_faces.keys())}")
 else:
-    print("No database found. Starting with empty memory.")
     known_faces = {}
 
 cap = cv2.VideoCapture(0)
@@ -159,7 +154,8 @@ while cap.isOpened():
                 if global_id in person_sessions:
                     person_sessions[global_id]["last_seen"] = current_time
 
-                label = f"{global_id} | Status: Active"
+                # Removed "| Status: Active" from label
+                label = f"{global_id}"
                 color = (0, 255, 0) if not global_id.startswith("Visitor") else (0, 255, 255)
             else:
                 label = f"Head #{track_id} (Checking...)"
@@ -180,9 +176,6 @@ while cap.isOpened():
 
     for g_id in finished_sessions:
         del person_sessions[g_id]
-
-    cv2.putText(frame, f"Active Seats: {present_count}", (20, 40),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
 
     cv2.imshow("Sit-In / Sit-Out Tracker", frame)
 

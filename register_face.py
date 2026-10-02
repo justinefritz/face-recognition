@@ -7,8 +7,6 @@ from insightface.app import FaceAnalysis
 
 DB_FILE = "face_database.pkl"
 
-# Initialize InsightFace with Intel DirectML
-print("Initializing face registration engine...")
 app = FaceAnalysis(name='buffalo_s', providers=['DmlExecutionProvider', 'CPUExecutionProvider'])
 app.prepare(ctx_id=0, det_size=(160, 160))
 
@@ -16,7 +14,6 @@ app.prepare(ctx_id=0, det_size=(160, 160))
 if os.path.exists(DB_FILE):
     with open(DB_FILE, "rb") as f:
         known_faces = pickle.load(f)
-    print(f"Loaded existing database with {len(known_faces)} registered individuals.")
 else:
     known_faces = {}
 
@@ -36,13 +33,8 @@ def cosine_distance(a, b):
 
 recording = False
 start_time = None
-RECORDING_DURATION = 15.0  # Seconds to record
+RECORDING_DURATION = 20.0  # Seconds to record
 captured_embeddings = []
-
-print("\n--- INSTRUCTIONS ---")
-print("1. Press 'SPACE' to start the 5-second continuous recording.")
-print("2. Slowly turn your head (center, left, right, up, down) while recording.")
-print("3. Press 'Q' to cancel.\n")
 
 while cap.isOpened():
     ret, frame = cap.read()
