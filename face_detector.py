@@ -43,7 +43,6 @@ person_sessions = {}      # { global_id: {"start_time": float, "last_seen": floa
 COSINE_THRESHOLD = 0.72
 SIT_OUT_TIMEOUT = 2.0     # Seconds of absence before SIT_OUT
 FACE_SKIP_FRAMES = 5      # Run heavy AI analysis only every Nth frame
-next_person_id = 1
 
 def cosine_distance(source, target):
     s = source / np.linalg.norm(source)
@@ -89,7 +88,7 @@ while cap.isOpened():
 
     currently_visible_persons = set()
 
-    # 2. MATCH & DISPLAY DETECTED FACES
+    # 2. MATCH & DISPLAY ONLY REGISTERED FACES
     for face in cached_detected_faces:
         box = face.bbox.astype(int)
         current_emb = face.embedding
@@ -104,33 +103,26 @@ while cap.isOpened():
                 min_dist = d
                 best_match_id = f_id
 
-        if min_dist < COSINE_THRESHOLD:
+        # STRICT REGISTERED-ONLY FILTER
+        if min_dist < COSINE_THRESHOLD and best_match_id is not None:
             global_id = best_match_id
-        else:
-            global_id = f"Visitor #{next_person_id}"
-            next_person_id += 1
-            known_faces[global_id] = {
-                "embeddings": [current_emb],
-                "total_time": 0.0
-            }
+            currently_visible_persons.add(global_id)
 
-        currently_visible_persons.add(global_id)
+            # LOG SIT_IN EVENT
+            if global_id not in person_sessions:
+                person_sessions[global_id] = {
+                    "start_time": current_time,
+                    "last_seen": current_time
+                }
+                log_event(global_id, "SIT_IN")
+            else:
+                person_sessions[global_id]["last_seen"] = current_time
 
-        # LOG SIT_IN EVENT
-        if global_id not in person_sessions:
-            person_sessions[global_id] = {
-                "start_time": current_time,
-                "last_seen": current_time
-            }
-            log_event(global_id, "SIT_IN")
-        else:
-            person_sessions[global_id]["last_seen"] = current_time
-
-        # UI Rendering
-        color = (0, 255, 0) if not global_id.startswith("Visitor") else (0, 255, 255)
-        cv2.rectangle(frame, (box[0], box[1]), (box[2], box[3]), color, 2)
-        cv2.putText(frame, global_id, (box[0], max(box[1] - 10, 20)),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+            # UI Rendering for Registered Persons
+            color = (0, 255, 0)
+            cv2.rectangle(frame, (box[0], box[1]), (box[2], box[3]), color, 2)
+            cv2.putText(frame, global_id, (box[0], max(box[1] - 10, 20)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
     # 3. CHECK FOR SIT_OUT EVENTS
     finished_sessions = []
