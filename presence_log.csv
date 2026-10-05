@@ -1,15 +1,1 @@
 Timestamp,Name,Action,Session Duration (s)
-2026-10-05 16:11:29,Justine Fritz Flores,SIT_IN,-
-2026-10-05 16:11:32,Visitor #1,SIT_IN,-
-2026-10-05 16:11:35,Visitor #2,SIT_IN,-
-2026-10-05 16:11:35,Visitor #1,SIT_OUT,1s
-2026-10-05 16:11:42,Visitor #2,SIT_OUT,4s
-2026-10-05 16:11:49,Visitor #1,SIT_IN,-
-2026-10-05 16:11:50,Justine Fritz Flores,SIT_OUT,19s
-2026-10-05 16:11:50,Visitor #2,SIT_IN,-
-2026-10-05 16:11:51,Justine Fritz Flores,SIT_IN,-
-2026-10-05 16:11:51,Visitor #1,SIT_OUT,0s
-2026-10-05 16:11:52,Visitor #2,SIT_OUT,0s
-2026-10-05 16:12:03,Visitor #3,SIT_IN,-
-2026-10-05 16:12:05,Visitor #3,SIT_OUT,0s
-2026-10-05 16:28:10,Justine Fritz Flores,SIT_IN,-
